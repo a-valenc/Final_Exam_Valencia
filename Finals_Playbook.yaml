@@ -1,0 +1,88 @@
+---
+- hosts: all
+  become: true
+  vars_files:
+    - config.yaml
+  tasks:
+    - name: Install Apache (Ubuntu) or HTTPD (CentOS)
+      package:
+        name: "{{ apache_ubuntu }}"
+        state: present
+      when: ansible_distribution == "Ubuntu"
+
+    - name: Install Apache (CentOS)
+      package:
+        name: "{{ apache_centos }}"
+        state: present
+      when: ansible_distribution == "CentOS"
+
+    - name: Start and enable Apache/HTTPD service
+      service:
+        name: "{{ apache_ubuntu }}"
+        state: started
+        enabled: true
+      when: ansible_distribution == "Ubuntu"
+
+    - name: Start Apache service (CentOS)
+      service:
+        name: "{{ apache_centos }}"
+        state: started
+        enabled: true
+      when: ansible_distribution == "CentOS"
+
+    - name: Download Prometheus
+      get_url:
+        url: "https://github.com/prometheus/prometheus/releases/download/v{{ prometheus_version }}/prometheus-{{ prometheus_version }}.linux-amd64.tar.gz"
+        dest: /tmp/prometheus.tar.gz
+
+    - name: Extract Prometheus
+      unarchive:
+        src: /tmp/prometheus.tar.gz
+        dest: /opt/
+        remote_src: yes
+
+    - name: Create Prometheus user
+      user:
+        name: prometheus
+        system: yes
+
+    - name: Set Prometheus directories
+      file:
+        path: "/opt/prometheus-{{ prometheus_version }}.linux-amd64"
+        owner: prometheus
+        group: prometheus
+        state: directory
+        recurse: yes
+
+    - name: Create systemd service file
+      copy:
+        dest: /etc/systemd/system/prometheus.service
+        content: |
+          [Unit]
+          Description=Prometheus
+          Wants=network-online.target
+          After=network-online.target
+
+          [Service]
+          User=prometheus
+          Group=prometheus
+          ExecStart=/opt/prometheus-{{ prometheus_version }}.linux-amd64/prometheus \
+            --config.file=/opt/prometheus-{{ prometheus_version }}.linux-amd64/prometheus.yml \
+            --storage.tsdb.path=/opt/prometheus-{{ prometheus_version }}.linux-amd64/data
+
+          [Install]
+          WantedBy=multi-user.target
+
+    - name: Reload systemd and start Prometheus
+      shell: |
+        systemctl daemon-reload
+        systemctl enable prometheus
+        systemctl start prometheus
+
+    - name: Create custom MOTD script
+      copy:
+        dest: /etc/update-motd.d/99-custom
+        content: |
+          #!/bin/bash
+          echo "Ansible Managed by {{ username }}"
+        mode: '0755'
