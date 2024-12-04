@@ -79,10 +79,7 @@
         systemctl enable prometheus
         systemctl start prometheus
 
-    - name: Create custom MOTD script
+    - name: Update MOTD to "Ansible Managed by Aaron Valencia"
       copy:
-        dest: /etc/update-motd.d/99-custom
-        content: |
-          #!/bin/bash
-          echo "Ansible Managed by {{ username }}"
-        mode: '0755'
+        content: "Ansible Managed by Aaron Valencia\n"
+        dest: /etc/motd
